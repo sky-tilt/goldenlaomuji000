@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>aurclips 云端剪辑器</title>
+<script src="config.js"></script>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --border:#2a2f3a; --text:#e6e9ef;
+          --muted:#8b93a3; --accent:#4f8cff; --ok:#3ecf8e; --err:#ff5c5c; --warn:#ffb84d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:13px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+  header { display:flex; align-items:center; gap:10px; padding:12px 18px; flex-wrap:wrap;
+           border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  .spacer { flex:1; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--panel2);
+           border:1px solid var(--border); color:var(--muted); }
+  .badge.ok { color:var(--ok); border-color:#2a4a3a; } .badge.err { color:var(--err); border-color:#4a2a2a; }
+  main { display:grid; grid-template-columns:340px 1fr 440px; gap:1px; height:calc(100vh - 52px); background:var(--border); }
+  @media (max-width:1100px) { main { grid-template-columns:1fr; height:auto; } }
+  section { background:var(--panel); overflow-y:auto; padding:14px; }
+  section h2 { font-size:12px; letter-spacing:.08em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+  .toolbar { display:flex; gap:6px; margin:8px 0; flex-wrap:wrap; }
+  button { background:var(--panel2); color:var(--text); border:1px solid var(--border);
+           padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px; }
+  button:hover { background:#252a35; } button:disabled { opacity:.45; cursor:not-allowed; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--err); }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border);
+    border-radius:5px; padding:5px 7px; font:inherit; }
+  input[type=checkbox] { accent-color:var(--accent); }
+  .drop { border:2px dashed var(--border); border-radius:8px; padding:18px; text-align:center;
+          color:var(--muted); cursor:pointer; }
+  .drop.over { border-color:var(--accent); color:var(--text); }
+  video#player { width:100%; max-height:230px; background:#000; border-radius:6px; margin-top:8px; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0; }
+  .chip { background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:1px 8px; font-size:12px; cursor:pointer; }
+  .chip:hover { border-color:var(--err); }
+  .field { margin-bottom:10px; } .field label { display:block; font-size:12px; margin-bottom:3px; }
+  .field .desc { color:var(--muted); font-size:11px; margin-top:2px; }
+  .field-row { display:flex; align-items:center; gap:8px; } .field-row input[type=checkbox] { width:auto; }
+  details.group { border:1px solid var(--border); border-radius:6px; margin-bottom:8px; background:var(--panel2); }
+  details.group > summary { padding:8px 10px; cursor:pointer; font-weight:600; font-size:12px; }
+  details.group[open] > summary { border-bottom:1px solid var(--border); }
+  details.group .body { padding:10px; } .group-desc { color:var(--muted); font-size:11px; margin-bottom:8px; }
+  #log { font-family:Consolas,"Cascadia Mono",monospace; font-size:11.5px; background:#0a0c10;
+         border:1px solid var(--border); border-radius:6px; padding:8px; height:260px; overflow-y:auto;
+         white-space:pre-wrap; word-break:break-word; }
+  #log .err { color:var(--err); } #log .ok { color:var(--ok); } #log .warn { color:var(--warn); }
+  .bar { height:6px; background:var(--panel2); border-radius:4px; overflow:hidden; margin:6px 0; display:none; }
+  .bar > div { height:100%; width:0; background:var(--accent); transition:width .2s; }
+  .result, .hist { border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-bottom:8px; background:var(--panel2); }
+  .result video { width:100%; max-height:300px; background:#000; border-radius:4px; margin:6px 0; }
+  .result a { color:var(--accent); margin-right:10px; font-size:12px; }
+  .hist { cursor:pointer; display:flex; align-items:center; gap:8px; font-size:12px; }
+  .hist:hover { border-color:var(--accent); } .hist .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #login { position:fixed; inset:0; background:rgba(0,0,0,.8); display:flex; align-items:center; justify-content:center; z-index:9; }
+  #login .box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:22px; width:320px; }
+  #login h3 { margin:0 0 10px; } .muted { color:var(--muted); font-size:11px; }
+</style>
+</head>
+<body>
+
+<div id="login" style="display:none">
+  <div class="box">
+    <h3>🎬 aurclips 云端剪辑器</h3>
+    <div class="muted" style="margin-bottom:10px">请输入你的访问码（向管理员索取）</div>
+    <input type="password" id="login-code" placeholder="访问码" autocomplete="off">
+    <div id="login-err" style="color:var(--err);font-size:12px;margin:6px 0"></div>
+    <button class="primary" id="btn-login" style="width:100%">进入</button>
+  </div>
+</div>
+
+<header>
+  <h1>🎬 aurclips 云端剪辑器</h1>
+  <span class="badge" id="user-badge">未登录</span>
+  <span class="spacer"></span>
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px">
+    <input type="checkbox" id="quick-preprocess"> 🎤 清理语气词/卡顿
+  </label>
+  <button id="btn-save-settings" style="border-color:var(--accent);color:var(--accent)">💾 保存设置到本浏览器</button>
+  <button id="btn-io">导入/导出设置</button>
+  <button id="btn-logout">退出</button>
+</header>
+
+<main>
+  <section>
+    <h2>1. 素材</h2>
+    <div class="drop" id="drop">点击选择视频，或把文件拖到这里<br><span class="muted">视频只在你点「开始剪辑」后才会上传</span></div>
+    <input type="file" id="file" accept="video/*,audio/*,.mkv,.flv,.ts" style="display:none">
+    <div id="file-info" class="muted" style="margin-top:6px"></div>
+    <video id="player" controls preload="metadata" style="display:none"></video>
+    <div id="player-hint" class="muted"></div>
+    <div id="mark-tools" style="display:none">
+      <div class="toolbar">
+        <button id="btn-mark" style="border-color:var(--accent);color:var(--accent)">📍 标记此刻 (Enter)</button>
+        <button id="btn-undo">撤销 (U)</button>
+        <button id="btn-clear-marks" class="danger">清空</button>
+      </div>
+      <div class="muted">边看边按 Enter：每个标记点会让包含它的片段优先入选。点标记可删除。</div>
+      <div class="chips" id="marks-chips"></div>
+      <textarea id="marks-manual" rows="2" placeholder="也可手动输入时间点：00:20, 1:02:03 或秒数，逗号或换行分隔"></textarea>
+    </div>
+
+    <h2 style="margin-top:18px">历史任务</h2>
+    <div id="history"><div class="muted">加载中…</div></div>
+  </section>
+
+  <section>
+    <h2>2. 参数</h2>
+    <div class="muted" style="margin-bottom:10px">这里的改动只影响本次；点右上角「保存设置到本浏览器」可长期保留。</div>
+    <div id="params-form"></div>
+  </section>
+
+  <section>
+    <h2>3. 进度与结果</h2>
+    <div class="toolbar">
+      <button id="btn-start" class="primary">开始剪辑</button>
+      <span class="badge" id="task-badge" style="display:none"></span>
+      <span class="muted" id="limits"></span>
+    </div>
+    <div class="bar" id="bar"><div></div></div>
+    <div id="bar-text" class="muted"></div>
+    <div id="log"></div>
+    <h2 style="margin-top:14px">成片</h2>
+    <div id="results"><div class="muted">任务完成后在这里预览和下载</div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+"use strict";
+const API = (window.AURCLIPS_API || "").replace(/\/+$/, "");
+const $ = (s) => document.querySelector(s);
+const LS_CODE = "aurclips.code", LS_SET = "aurclips.settings.v1";
+const LIST_KEYS = ["marks.phrases", "preprocess.filler_words", "exclude.keywords", "selection.topic_openers"];
+const S = { code: localStorage.getItem(LS_CODE) || "", params: null, values: {}, saved: {}, profileWeights: {},
+            file: null, marks: [], jobId: null, timer: null, busy: false, limits: {} };
+
+// ---------- 工具 ----------
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtSize = (n) => { const u=["B","KB","MB","GB"]; let i=0; while(n>=1024&&i<3){n/=1024;i++;} return n.toFixed(i?1:0)+u[i]; };
+const mmss = (t) => { const m=Math.floor(t/60), s=t-m*60; return String(m).padStart(2,"0")+":"+(s%1?s.toFixed(2).padStart(5,"0"):String(Math.floor(s)).padStart(2,"0")); };
+function badge(el, text, cls="") { el.textContent = text; el.className = "badge " + cls; }
+function log(line, cls="") {
+  const d = document.createElement("div"); if (cls) d.className = cls; d.textContent = line;
+  $("#log").appendChild(d); $("#log").scrollTop = $("#log").scrollHeight;
+}
+function setProgress(p, text) {
+  $("#bar").style.display = p == null ? "none" : "block";
+  if (p != null) $("#bar > div").style.width = (p*100).toFixed(1) + "%";
+  $("#bar-text").textContent = text || "";
+}
+async function api(path, opts = {}) {
+  const r = await fetch(API + path, { ...opts, headers: { "X-Access-Code": S.code, ...(opts.headers||{}) } });
+  if (r.status === 401) { showLogin("访问码不正确或已失效"); throw new Error("未登录"); }
+  return r;
+}
+async function apiJson(path, opts) {
+  const r = await api(path, opts);
+  if (!r.ok) { let m = r.statusText; try { const j = await r.json(); m = j.detail || m; } catch {} throw new Error(m); }
+  return r.json();
+}
+
+// ---------- 登录 ----------
+function showLogin(msg="") { $("#login").style.display = "flex"; $("#login-err").textContent = msg; $("#login-code").focus(); }
+async function login() {
+  S.code = $("#login-code").value.trim();
+  try {
+    await boot();
+    localStorage.setItem(LS_CODE, S.code);
+    $("#login").style.display = "none";
+  } catch (e) { if (S.code) $("#login-err").textContent = "无法登录：" + e.message; }
+}
+
+// ---------- 参数面板 ----------
+function loadSaved() { try { return JSON.parse(localStorage.getItem(LS_SET) || "{}"); } catch { return {}; } }
+function renderParams() {
+  const form = $("#params-form"); form.innerHTML = "";
+  for (const [gid, g] of Object.entries(S.params)) {
+    const det = document.createElement("details"); det.className = "group";
+    det.open = ["preprocess","selection","render","whisper","exclude","marks"].includes(gid);
+    det.innerHTML = `<summary>${esc(g.label)}</summary>`;
+    const body = document.createElement("div"); body.className = "body";
+    if (g.desc) body.innerHTML = `<div class="group-desc">${esc(g.desc)}</div>`;
+    for (const it of g.items) body.appendChild(field(it));
+    det.appendChild(body); form.appendChild(det);
+  }
+  syncQuick();
+}
+function weightHint(name) { const pw = S.profileWeights[S.values["selection.profile"]]; return pw && pw[name] !== undefined ? "默认 " + pw[name] : ""; }
+function field(it) {
+  const wrap = document.createElement("div"); wrap.className = "field";
+  const lab = document.createElement("label"); lab.textContent = it.label || it.key; wrap.appendChild(lab);
+  const row = document.createElement("div"); row.className = "field-row";
+  let val = S.values[it.key];
+  if (Array.isArray(val)) val = val.join(", ");
+  let el;
+  if (it.type === "bool") {
+    el = document.createElement("input"); el.type = "checkbox"; el.checked = !!val;
+    el.onchange = () => { S.values[it.key] = el.checked; if (it.key === "preprocess.enabled") syncQuick(); };
+    row.appendChild(el); row.appendChild(document.createTextNode(" 启用"));
+  } else if (it.type === "select") {
+    el = document.createElement("select");
+    for (const o of it.options) { const op = document.createElement("option"); op.value = op.textContent = o; if (o === val) op.selected = true; el.appendChild(op); }
+    el.onchange = () => { S.values[it.key] = el.value; if (it.key === "selection.profile") document.querySelectorAll("input[data-weight]").forEach(i => i.placeholder = weightHint(i.dataset.weight)); };
+    row.appendChild(el);
+  } else if (it.type === "int" || it.type === "float") {
+    el = document.createElement("input"); el.type = "number";
+    if (it.min !== undefined) el.min = it.min; if (it.max !== undefined) el.max = it.max;
+    el.step = it.type === "int" ? 1 : (it.step || 0.01); el.value = val ?? "";
+    if (it.key.startsWith("selection.weights.")) { el.dataset.weight = it.key.split(".").pop(); el.placeholder = weightHint(el.dataset.weight); }
+    el.onchange = () => { const n = it.type === "int" ? parseInt(el.value, 10) : parseFloat(el.value); S.values[it.key] = isNaN(n) ? null : n; };
+    row.appendChild(el);
+  } else if (it.type === "textarea") {
+    el = document.createElement("textarea"); el.rows = 3; el.value = val ?? ""; el.onchange = () => S.values[it.key] = el.value; row.appendChild(el);
+  } else {
+    el = document.createElement("input"); el.type = "text"; el.value = val ?? ""; el.onchange = () => S.values[it.key] = el.value; row.appendChild(el);
+  }
+  el.dataset.key = it.key; wrap.appendChild(row);
+  if (it.desc) { const d = document.createElement("div"); d.className = "desc"; d.textContent = it.desc; wrap.appendChild(d); }
+  return wrap;
+}
+function syncQuick() { $("#quick-preprocess").checked = !!S.values["preprocess.enabled"];
+  const cb = document.querySelector('input[data-key="preprocess.enabled"]'); if (cb) cb.checked = $("#quick-preprocess").checked; }
+function collectOverrides() {
+  const out = {};
+  for (const g of Object.values(S.params)) for (const it of g.items) {
+    let v = S.values[it.key];
+    if (v === undefined || v === null) continue;
+    if (v === "" && it.key !== "whisper.language") continue;
+    if (Array.isArray(v)) v = v.join(",");
+    out[it.key] = v;
+  }
+  return out;
+}
+
+// ---------- 素材与标记 ----------
+function setFile(f) {
+  if (!f) return;
+  S.file = f; S.marks = [];
+  $("#file-info").textContent = `${f.name}  (${fmtSize(f.size)})`;
+  const p = $("#player"); p.style.display = "block"; $("#mark-tools").style.display = "block";
+  if (p.dataset.url) URL.revokeObjectURL(p.dataset.url);
+  p.dataset.url = URL.createObjectURL(f); p.src = p.dataset.url;
+  $("#player-hint").textContent = "";
+  p.onerror = () => { $("#player-hint").textContent = "浏览器无法播放这种格式（不影响剪辑）。可在下方手动输入时间点。"; };
+  renderMarks();
+}
+function addMark() {
+  const p = $("#player"); if (!S.file || isNaN(p.currentTime)) return;
+  const t = p.currentTime;
+  if (S.marks.some(m => Math.abs(m - t) < 1)) { log(`[标记] ${mmss(t)} 附近已有标记`, "warn"); return; }
+  S.marks.push(t); S.marks.sort((a,b)=>a-b); renderMarks();
+}
+function renderMarks() {
+  const box = $("#marks-chips"); box.innerHTML = "";
+  S.marks.forEach((t, i) => { const c = document.createElement("span"); c.className = "chip"; c.textContent = "📍 " + mmss(t) + " ✕";
+    c.onclick = () => { S.marks.splice(i, 1); renderMarks(); }; box.appendChild(c); });
+}
+function marksText() {
+  const manual = $("#marks-manual").value.split(/[,，、\n]+/).map(s => s.trim()).filter(Boolean);
+  return [...S.marks.map(mmss), ...manual].join("\n");
+}
+
+// ---------- 上传 + 提交 ----------
+async function upload(file) {
+  const { upload_id, chunk_bytes } = await apiJson("/api/uploads", { method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify({ filename: file.name, size: file.size }) });
+  let offset = 0; const t0 = Date.now();
+  while (offset < file.size) {
+    const end = Math.min(offset + chunk_bytes, file.size);
+    let ok = false;
+    for (let attempt = 0; attempt < 5 && !ok; attempt++) {
+      try {
+        const r = await api(`/api/uploads/${upload_id}?offset=${offset}`, { method: "PUT", body: file.slice(offset, end) });
+        if (r.ok) { offset = (await r.json()).received; ok = true; }
+        else if (r.status === 409) { offset = JSON.parse((await r.json()).detail).received; ok = true; }   // 断点续传
+        else throw new Error((await r.json()).detail || r.statusText);
+      } catch (e) { if (attempt === 4) throw e; await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); }
+    }
+    const sp = offset / ((Date.now() - t0) / 1000) || 0;
+    setProgress(offset / file.size, `上传中 ${(offset / file.size * 100).toFixed(0)}%  ·  ${fmtSize(sp)}/s`);
+  }
+  return upload_id;
+}
+async function start() {
+  if (S.busy) return;
+  if (!S.file) { log("[提示] 先选择一个视频", "warn"); return; }
+  S.busy = true; $("#btn-start").disabled = true; $("#log").innerHTML = ""; $("#results").innerHTML = "";
+  badge($("#task-badge"), "上传中…"); $("#task-badge").style.display = "";
+  try {
+    log(`— 开始上传 ${S.file.name} —`);
+    const uid = await upload(S.file);
+    setProgress(null);
+    log("上传完成，提交任务…", "ok");
+    const { job_id } = await apiJson("/api/jobs", { method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ upload_id: uid, settings: collectOverrides(), marks: marksText() }) });
+    S.jobId = job_id; poll();
+  } catch (e) {
+    log("[错误] " + e.message, "err"); badge($("#task-badge"), "失败", "err");
+    S.busy = false; $("#btn-start").disabled = false; setProgress(null);
+  }
+}
+
+// ---------- 轮询与结果 ----------
+function poll() {
+  clearTimeout(S.timer);
+  const tick = async () => {
+    try {
+      const j = await apiJson("/api/jobs/" + S.jobId);
+      showJob(j);
+      if (j.status === "queued" || j.status === "running") { S.timer = setTimeout(tick, 2500); return; }
+    } catch (e) { log("[网络] " + e.message, "err"); S.timer = setTimeout(tick, 5000); return; }
+    S.busy = false; $("#btn-start").disabled = false; loadHistory();
+  };
+  tick();
+}
+function showJob(j) {
+  const names = { queued: "排队中（云端启动 GPU 需要约 10–60 秒）", running: "运行中…", done: "完成", error: "出错" };
+  badge($("#task-badge"), names[j.status] || j.status, j.status === "done" ? "ok" : j.status === "error" ? "err" : "");
+  $("#task-badge").style.display = "";
+  const L = $("#log"); L.innerHTML = "";
+  for (const l of j.log || []) {
+    const cls = /\[错误\]|error|Traceback/i.test(l) ? "err" : /listo|完成|recorte\(s\)/i.test(l) ? "ok" : /aviso|descart|淘汰|排除/i.test(l) ? "warn" : "";
+    log(l, cls);
+  }
+  if (j.status === "error" && j.error) log("— 任务出错：" + j.error + " —", "err");
+  renderResults(j);
+}
+function renderResults(j) {
+  const box = $("#results"); box.innerHTML = "";
+  const vids = (j.results || []).filter(r => r.kind === "video");
+  if (!vids.length) { box.innerHTML = `<div class="muted">${j.status === "done" ? "没有产出片段" : "任务完成后在这里预览和下载"}</div>`; return; }
+  const txt = Object.fromEntries((j.results || []).filter(r => r.kind === "text").map(r => [r.name.replace(/\.txt$/, ""), r]));
+  for (const v of vids) {
+    const d = document.createElement("div"); d.className = "result";
+    const url = API + v.url, t = txt[v.name.replace(/\.mp4$/, "")];
+    d.innerHTML = `<div style="font-size:12px;font-weight:600">${esc(v.name)} <span class="muted">${fmtSize(v.size)}</span></div>
+      <video controls preload="metadata" src="${esc(url)}"></video>
+      <a href="${esc(url + "&dl=1")}">⬇ 下载视频</a>${t ? `<a href="${esc(API + t.url)}" target="_blank">📝 标题/描述</a>` : ""}`;
+    box.appendChild(d);
+  }
+}
+
+// ---------- 历史 ----------
+async function loadHistory() {
+  const box = $("#history");
+  try {
+    const { jobs } = await apiJson("/api/jobs");
+    box.innerHTML = jobs.length ? "" : '<div class="muted">还没有任务</div>';
+    for (const j of jobs) {
+      const d = document.createElement("div"); d.className = "hist";
+      const icon = { done: "✅", error: "❌", queued: "⏳", running: "⏳" }[j.status] || "";
+      d.innerHTML = `<span>${icon}</span><span class="name" title="${esc(j.filename)}">${esc(j.filename)}</span>
+        <span class="muted">${new Date(j.created * 1000).toLocaleString([], {month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+        <button class="danger" style="padding:1px 6px">✕</button>`;
+      d.onclick = async (e) => {
+        if (e.target.tagName === "BUTTON") {
+          if (!confirm("删除这个任务和它的成片？")) return;
+          try { await apiJson("/api/jobs/" + j.id, { method: "DELETE" }); loadHistory(); } catch (er) { alert(er.message); } return; }
+        S.jobId = j.id; poll();
+      };
+      box.appendChild(d);
+    }
+  } catch (e) { box.innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
+}
+
+// ---------- 设置保存/导入/导出 ----------
+function saveSettings() { localStorage.setItem(LS_SET, JSON.stringify(S.values)); log("[设置] 已保存到本浏览器", "ok"); }
+function ioSettings() {
+  const cur = JSON.stringify(S.values, null, 1);
+  const txt = prompt("【导出】下面是当前设置，可复制保存。\n【导入】清空后粘贴设置 JSON 再点确定：", cur);
+  if (txt === null || txt === cur) return;
+  try { const o = JSON.parse(txt); Object.assign(S.values, o); renderParams(); log("[设置] 已导入", "ok"); }
+  catch { alert("格式不正确，没有导入"); }
+}
+
+// ---------- 启动 ----------
+async function boot() {
+  if (!API || API.includes("你的名字")) { $("#login").style.display = "none";
+    document.body.insertAdjacentHTML("afterbegin", '<div style="padding:30px;color:var(--err)">还没有配置云端地址：请打开 config.js，把里面的网址改成部署后 Modal 给你的地址。</div>'); throw new Error("未配置"); }
+  const c = await apiJson("/api/config");
+  S.params = c.params; S.profileWeights = c.profile_weights; S.limits = c.limits;
+  S.values = { ...c.values, ...loadSaved() };
+  badge($("#user-badge"), "👤 " + c.user + (c.is_admin ? "（管理员）" : ""), "ok");
+  $("#limits").textContent = `单文件 ≤ ${c.limits.max_upload_mb} MB · 每天 ${c.limits.daily_jobs} 次`;
+  renderParams(); loadHistory();
+}
+function bind() {
+  $("#btn-login").onclick = login;
+  $("#login-code").onkeydown = (e) => { if (e.key === "Enter") login(); };
+  $("#btn-logout").onclick = () => { localStorage.removeItem(LS_CODE); S.code = ""; location.reload(); };
+  const drop = $("#drop"), file = $("#file");
+  drop.onclick = () => file.click();
+  file.onchange = () => setFile(file.files[0]);
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); setFile(e.dataTransfer.files[0]); };
+  $("#btn-mark").onclick = addMark;
+  $("#btn-undo").onclick = () => { S.marks.pop(); renderMarks(); };
+  $("#btn-clear-marks").onclick = () => { S.marks = []; renderMarks(); };
+  document.addEventListener("keydown", (e) => {
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName) || !S.file) return;
+    if (e.key === "Enter" || e.key.toLowerCase() === "m") { e.preventDefault(); addMark(); }
+    else if (e.key.toLowerCase() === "u") { S.marks.pop(); renderMarks(); }
+  });
+  $("#btn-start").onclick = start;
+  $("#btn-save-settings").onclick = saveSettings;
+  $("#btn-io").onclick = ioSettings;
+  $("#quick-preprocess").onchange = (e) => { S.values["preprocess.enabled"] = e.target.checked;
+    const cb = document.querySelector('input[data-key="preprocess.enabled"]'); if (cb) cb.checked = e.target.checked; };
+}
+bind();
+(async () => { if (!S.code) { showLogin(); return; } try { await boot(); } catch (e) { if (e.message !== "未登录" && e.message !== "未配置") showLogin("无法连接云端：" + e.message); } })();
+})();
+</script>
+</body>
+</html>
