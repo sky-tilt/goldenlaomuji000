@@ -333,15 +333,18 @@ function showJob(j) {
 }
 function renderResults(j) {
   const box = $("#results"); box.innerHTML = "";
-  const vids = (j.results || []).filter(r => r.kind === "video");
+  const vids = (j.results || []).filter(r => r.kind === "video" || r.kind === "audio");
   if (!vids.length) { box.innerHTML = `<div class="muted">${j.status === "done" ? "没有产出片段" : "任务完成后在这里预览和下载"}</div>`; return; }
-  const txt = Object.fromEntries((j.results || []).filter(r => r.kind === "text").map(r => [r.name.replace(/\.txt$/, ""), r]));
+  const base = (n) => n.replace(/\.[^.]+$/, "");
+  const byKind = (k) => Object.fromEntries((j.results || []).filter(r => r.kind === k).map(r => [base(r.name), r]));
+  const txt = byKind("text"), srt = byKind("subtitle");
   for (const v of vids) {
     const d = document.createElement("div"); d.className = "result";
-    const url = API + v.url, t = txt[v.name.replace(/\.mp4$/, "")];
+    const url = API + v.url, t = txt[base(v.name)], s = srt[base(v.name)];
+    const tag = v.kind === "audio" ? "audio" : "video";
     d.innerHTML = `<div style="font-size:12px;font-weight:600">${esc(v.name)} <span class="muted">${fmtSize(v.size)}</span></div>
-      <video controls preload="metadata" src="${esc(url)}"></video>
-      <a href="${esc(url + "&dl=1")}">⬇ 下载视频</a>${t ? `<a href="${esc(API + t.url)}" target="_blank">📝 标题/描述</a>` : ""}`;
+      <${tag} controls preload="metadata" src="${esc(url)}" style="width:100%"></${tag}>
+      <a href="${esc(url + "&dl=1")}">⬇ 下载${v.kind === "audio" ? "音频" : "视频"}</a>${s ? `<a href="${esc(API + s.url + "&dl=1")}">🔤 下载字幕(.srt)</a>` : ""}${t ? `<a href="${esc(API + t.url)}" target="_blank">📝 标题/描述</a>` : ""}`;
     box.appendChild(d);
   }
 }
